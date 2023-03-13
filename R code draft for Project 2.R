@@ -91,13 +91,3 @@ ggplot(data = DataSet1, aes(x = Total.Food.Expenditure, y = Total.Number.of.Fami
   ggtitle("Total Food Expenditure vs. Number of Family Members by Electricity") +
   labs(x = "Total Food Expenditure (in Philippine peso)", y = "Total Number of Family Members") +
   theme(plot.title = element_text(hjust = 0.5))
-
-# Fit the generalized linear model
-
-model <- glm(Total.Number.of.Family.members ~ Total.Household.Income +
-Total.Food.Expenditure + Household.Head.Age + Type.of.Household +
-House.Floor.Area + House.Age + Number.of.bedrooms + Electricity, data =
-DataSet1, family = "poisson")
-
-# Get the model summary
-summary(model)
