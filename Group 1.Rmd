@@ -29,8 +29,7 @@ library(broom)
 ```
 
 ``````{r data, echo = FALSE, eval = TRUE}
-setwd("~/Desktop/Project 2/data_analysis")
-dataset <- read_csv("dataset.csv")
+dataset <- read_csv("dataset1.csv")
 ```
 
 # Introduction {#sec:intro}
@@ -46,8 +45,7 @@ This project begins with an expalnatory analysis into the data including data gr
 ## Data Mining {#sec:sub}
 
 ```{r}
-setwd("~/Desktop/Project 2/data_analysis")
-dataset <- read_csv("dataset.csv")
+dataset <- read_csv("dataset1.csv")
 
 library(kableExtra)
 library(gridExtra)
@@ -75,8 +73,7 @@ skim(df_num) %>%
 
 To better understand the data at hand, various figures were created to provide visuals and illustrations. We begin with the scatterplots of each variable to understand the distribution of the data:
 ```{r, eval = TRUE, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:scatters} Scatterplots of Phillipine Family", fig.pos = "H"}
-setwd("~/Desktop/Project 2/data_analysis")
-DataSet <- read_csv("dataset.csv")
+DataSet <- read_csv("dataset1.csv")
 library(kableExtra)
 library(gridExtra)
 library(ggplot2)
@@ -149,7 +146,7 @@ Multiple logistic regression models are also fitted for each predictor variable 
 
 ```{r include=FALSE}
    library(pROC)
-dt = read.csv("~/Desktop/Project 2/dataset1.csv")
+dt = read.csv("dataset1.csv")
 train_sub = sample(nrow(dt),7/10*nrow(dt))
 train_data = dt[train_sub,]
 test_data = dt[-train_sub,]
