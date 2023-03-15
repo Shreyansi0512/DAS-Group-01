@@ -154,14 +154,18 @@ test_data = dt[-train_sub,]
 dt_logistic <- glm(Total.Number.of.Family.members ~ Total.Household.Income+Total.Food.Expenditure+Household.Head.Age+House.Floor.Area+House.Age+Number.of.bedrooms, data = train_data)
 income_logistic <- glm(Total.Number.of.Family.members ~ Total.Household.Income, 
                    data = train_data)
-food_logistic <- glm(Total.Number.of.Family.members ~ Total.Food.Expenditure, 
+food_logistic <- glm(Total.Number.of.Family.members ~ Total.Food.Expenditure,
                        data = train_data)
+
 age_logistic <- glm(Total.Number.of.Family.members ~ Household.Head.Age, 
                      data = train_data)
+
 area_logistic <- glm(Total.Number.of.Family.members ~ House.Floor.Area, 
                      data = train_data)
+
 bed_logistic <- glm(Total.Number.of.Family.members ~ Number.of.bedrooms, 
                      data = train_data)
+
 house_age_logistic <- glm(Total.Number.of.Family.members ~ House.Age, 
                     data = train_data)
 ```
@@ -230,7 +234,7 @@ summary(dt_logistic)
 ```{R echo=FALSE}
 calc.relimp( Total.Number.of.Family.members~Total.Household.Income+Total.Food.Expenditure, data = train_data )
 ```
-Based on the output of the calc.relimp function, we can see that the total response variance for this variable is 5.363603, and the proportion of variance explained by this model is 22.02%. Total.Food.Expenditure appears to be more important in explaining the variance in the Total.Number.of.Family.members, as its relative importance (lmg) is higher than that of Total.Household.Income.And the coefficients indicate the relationship between each predictor and the response variable (Total.Number.of.Family.members). In the 1X model, a unit increase in Total.Household.Income is associated with a 2.276022e-06 increase in Total.Number.of.Family.members, whereas a unit increase in Total.Food.Expenditure is associated with a 2.539690e-05 increase in Total.Number.of.Family.members. In the 2Xs model, the relationships are -1.510802e-06 and 3.125984e-05, respectively. 
+Based on the output of the calc.relimp function, we can see that the total response variance for this variable is 5.363603, and the proportion of variance explained by this model is 24.11%. Total.Food.Expenditure appears to be more important in explaining the variance in the Total.Number.of.Family.members, as its relative importance (lmg) is higher than that of Total.Household.Income.And the coefficients indicate the relationship between each predictor and the response variable (Total.Number.of.Family.members). In the 1X model, a unit increase in Total.Household.Income is associated with a 2.276022e-06 increase in Total.Number.of.Family.members, whereas a unit increase in Total.Food.Expenditure is associated with a 2.539690e-05 increase in Total.Number.of.Family.members. In the 2Xs model, the relationships are -1.510802e-06 and 3.125984e-05, respectively. 
 
 # Conclusion {sec:Conc}
 From the results we get above, we have concluded that Total.Household.Income and Total.Food.Expenditure are the two most important variables. However, the average coefficients are still relatively small. This can be attributed to several reasons. The most significant reason is that Income and Expenditure are not on the same scale as the number of family members. Consequently, a sharp increase or decrease in Income and Expenditure may not necessarily cause any change in the number of family members.
