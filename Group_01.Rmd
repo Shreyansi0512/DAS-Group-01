@@ -18,20 +18,15 @@ knitr::opts_chunk$set(echo = TRUE, eval = TRUE, warning = FALSE, message = FALSE
 library(pROC)
 library(relaimpo)
 library(tidyverse) 
-library(car)
 library(kableExtra)
 library(gridExtra)
 library(skimr)
 library(knitr)
-library(broom)
 library(moderndive)
 library(gapminder)
-library(sjPlot)
 library(stats)
-library(jtools)
-library(relaimpo)
-library(caret)
 library(GGally)
+library(MASS)
 ```
 
 ```{r data, echo = FALSE, eval = TRUE}
@@ -150,19 +145,19 @@ Next, a pairs plot has been created to look at the scatter plots, density plots 
 #Pairs plot to show the correlation, and density plots and scatter plots of the
 #numeric variables
 ggpairs(dataset[,-c(1, 3, 7)], axisLabels = "none",
-        columnLabels = gsub('.', ' ', colnames(dataset[,-c(1,3,7)]), fixed = T),labeller = label_wrap_gen(10))+
+        columnLabels = gsub('.', ' ', colnames(dataset[,-c(1,3,7)]), fixed = T),
+        labeller = label_wrap_gen(10))+
    theme_bw(base_size = 9)
 
 ```
 
 Figure \ref{fig:scatters} shows the scatter plots, density plots and the correlation between the numeric variables. We can see the density plots seem relatively more symmetrical after the transformation into log. From the plot, it is also evident that multi-collinearity exists. Log of total income is highly correlated to log of food expenditure `r round(cor(dataset$Log.income, dataset$Log.food.exp)*100,2)`%. 
 
-
-The graphical analysis of categorical variables can be handled with bar charts and summaries. These can be seen below.
+Next, we move on to the analysis of the categorical variables. The graphical analysis of categorical variables can be handled with bar charts and summaries. These can be seen below.
 
 ```{r, out.width = '60%', fig.align = "center", fig.cap = "\\label{fig:gender of head1} Violin plot of number of family members across gender of household head", fig.pos = "H"}
 
-#Viloin plot of total number of family members based on sex of the household head
+#Violin plot of total number of family members based on sex of the household head
 
 dataset %>% 
   ggplot(aes(x = Household.Head.Sex, y = Total.Number.of.Family.members, 
@@ -215,7 +210,7 @@ dataset %>% ggplot(aes(x = Total.Number.of.Family.members, fill = Type.of.Househ
 
 ```
 
-For 'type of household' variable, a similar trend is seen as before. With higher family members, there is higher proportion of extended family as the type.
+For 'type of household' variable, a similar trend is seen as before. With higher family members, there is higher proportion of extended family as the type. Given that there is not much data points for the category "Two or More Nonrelated Persons/Members", we can choose to remove it. 
 
 The variables 'number of bedrooms' and 'log of total floor area' tend to vary together i.e the correlation is `r round(cor(dataset$Log.floorarea, dataset$Number.of.bedrooms)*100,2)`%. Households having high floor area generally have a higher number of bedrooms.
 This suggests that once we control for the floor area, number of bedrooms will not be significant. This can tested empirically during the model fit.
@@ -226,85 +221,101 @@ Using the trends seen in the data exploration, the analysis can be extended furt
 ## Model 1: Poisson Model
 
 
-At the same time, we should take into account the interaction between variables. The interaction between variables can sometimes provide insights that may not be evident when considering each variable independently. By including interaction terms in our generalized linear model, we can better understand the combined effects of these variables on the total number of people living in a household. This can help us develop a more accurate and comprehensive understanding of the factors that influence household size in the area under study.
-
 The first model that is used for this data is the possion model. This assumes that the response, given the covariates, follows poisson distribution and the mean and the variance are equal. The check for assumptions will be done after the model fitting.
 
 We start with the full model, using all the variables, except food expenditure because of the high correlation with the income variable.
 
+
 ```{r, eval=TRUE, pois_full}
-pois.fit <- glm(Total.Number.of.Family.members ~ Log.income + Household.Head.Sex +Household.Head.Age + Type.of.Household + Log.floorarea + House.Age + Number.of.bedrooms + Electricity, data = dataset, family = poisson())
+#Fitting a poison model on complete data
+pois.fit <- glm(Total.Number.of.Family.members ~ ., data = dataset, family = poisson())
 
 summary(pois.fit)
-
 ```
 
 Using the p-values as a metric to simplify the model, it can be seen that there are variables that need to be taken out, as they are not significant. As was suspected, the variable, number of bedrooms did not turn to be significant.Along with that, whether or not the household has electricity also did not affect the number of members. During the exploratory analysis, it was seen that the category 'Two or more non related persons' had low sample size. The corresponding high standard error could be the effect of that. This also suggests that the 'Type of household' variable could be transformed into a binary variable. A new model is then fit below:
 
 ```{r, eval=TRUE}
-dataset2 <- dataset %>% mutate(householdtype_binary = fct_recode(Type.of.Household, 'Not Extended Family' = 'Single Family', 'Not Extended Family' = "Two or More Nonrelated Persons/Members"))
+#Combing 2 types of households
+dataset2 <- dataset %>% mutate(
+  householdtype_binary = fct_recode(Type.of.Household, 
+                                    'Not Extended Family' = 'Single Family', 
+                                    'Not Extended Family' = 
+                                      "Two or More Nonrelated Persons/Members"))
+dataset2 <- dataset2 %>% 
+  select(-Type.of.Household)
 ```
 
 ```{r, eval=TRUE, pois_2}
-pois.fit2 <- glm(Total.Number.of.Family.members ~ Log.income + Household.Head.Sex +Household.Head.Age + householdtype_binary + Log.floorarea + House.Age, data = dataset2, family = poisson())
+#Fitting a poison model to the edited data
+pois.fit2 <- glm(Total.Number.of.Family.members ~ Household.Head.Sex  + House.Age
+                 + Log.income + Log.floorarea + Household.Head.Age + householdtype_binary,
+                 data = dataset2, family = poisson())
 
 summary(pois.fit2)
-
 ```
 Using p-values as a metric, it is seen that all of the variables seem to be significant. The variable of 'Type of Household' was transformed to a binary variable,with its levels being 'Extended family' and 'not extended family'; the later includes both 'single family' and 'Two or more no related persons'.
 
-The interpretation of coefficients in this model is different from that of coefficients in OLS. The model itself is multiplicative. So, for example, one unit increase in log_income means the number of members increase by `r round((exp(0.113) - 1)*100, 2)`% 
+The interpretation of coefficients in this model is different from that of coefficients in OLS. The model itself is multiplicative. So, for example, one unit increase in Log.income means the number of members increase by `r round((exp(pois.fit2$coefficients['Log.income']) - 1)*100, 2)`% 
 
-The deviance for the model, as read from the output, is 1489.3 at 1718 degrees of freedom. This value can be compared with the chi-square quantile for assessing lack of fit. The null hypothesis. The chi-square quantile is `r round(qchisq(0.95, df = pois.fit2$df.residual), 2)`. The deviance is less, which suggests that fit is better than the saturated model(at 5% significance level).
+The deviance for the model, as read from the output, is '1489.3 `r round(pois.fit2$deviance,2)` at 1718 degrees of freedom. This value can be compared with the chi-square quantile for assessing lack of fit. The chi-square quantile is `r round(qchisq(0.95, df = pois.fit2$df.residual), 2)`. The deviance is less, which suggests that fit is better than the saturated model(at 5% significance level).
 
 After the appropriate model is fitted, the assumptions are needed to be checked. Diagnostic plots can be used which involves plot of fitted values and deviance or pearson residuals.
 
 ```{r ,eval=TRUE, diagnostics}
-
-diagnostic.data <- dataset2 %>% select(Total.Number.of.Family.members) %>%     rename(actual = Total.Number.of.Family.members)
+#Preparng data for assumption check
+diagnostic.data <- dataset2 %>% select(Total.Number.of.Family.members) %>%
+  rename(actual = Total.Number.of.Family.members)
 
 diagnostic.data['y_pois'] <- predict(pois.fit2, type = 'response')
 diagnostic.data['y_link'] <- predict(pois.fit2, type = 'link') #contains log(lambda) values
 diagnostic.data['pois_deviance_resid'] <- resid(pois.fit2, type = 'deviance')
 ```
 
-```{r, eval=TRUE, diagnostic_plot1, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic} Residual plot for Poisson model.", fig.pos = "H"}
+```{r, eval=TRUE, diagnostic_plot1, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic1} Residual plot for Poisson model.", fig.pos = "H"}
+#Assumption Check
 diagnostic.data %>% ggplot(aes(y_link, pois_deviance_resid)) +
   geom_point() + labs(x = 'Fitted values', y = 'Deviance Residuals')
 
 ```
 
-The point of focus is the range of y-axis. Ideally, if the points are between +-2, it suggests a good fitting model. It can be seen that most of the points are within this range.The plot exhibits curvature, suggesting there might be some non-linearity in the relationship between the fitted values and residuals. The model may be improved with inclusion of non-linear terms in the model.
+The point of focus is the range of y-axis. Ideally, if the points are between +-2, it suggests a good fitting model. It can be seen in the figure \ref{fig:diagnostic1} that most of the points are within this range.The plot exhibits curvature, suggesting there might be some non-linearity in the relationship between the fitted values and residuals. The model may be improved with inclusion of non-linear terms in the model.
 
 The dispersion parameter is then calculated to check for overdispersion. The estimate of the dispersion parameter for the model is `r round(sum(resid(pois.fit2, type = 'pearson')^2)/pois.fit2$df.residual, 2)`. As the estimated parameter is < 1, overdispersion might not be an issue for this model. This gives assurance to the standard errors calculated for the parameters. A formal test could be done to check for the opposite case i.e., underdispersion, but this situation is unlikely in practice.
 
 The variable 'Total food expenditure' was found to be correlated with 'Total income' and was arbitrarily excluded. The poisson model could be refitted using that variable and keeping out the income variable. The model improvement or deterioration can then judged from metrics like AIC and deviance values. Note that, the variable is used in a log base-2 scale.
 
 ```{r, eval=TRUE, pois_3}
-pois.fit3 <-  glm(Total.Number.of.Family.members ~ Log.food.exp + Household.Head.Sex +Household.Head.Age + householdtype_binary + Log.floorarea + House.Age, data = dataset2, family = poisson())
+#Fitting another poisson model using Log.food.exp instead of Log.income this time
+pois.fit3 <-  glm(Total.Number.of.Family.members ~ Log.food.exp + Household.Head.Sex 
+                  +Household.Head.Age + householdtype_binary + Log.floorarea + 
+                    House.Age, data = dataset2, family = poisson())
 
 summary(pois.fit3)
 
 ```
 There seems to good improvement in the model fitting when AIC and deviance values are considered. The variables again seem to be significant at 5% significance level. The diagnostic plot, similar to the previous model, could be graphed to assess the assumptions.
 
-```{r, eval=TRUE, diagnostic_plot2, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic} Residual plot for Poisson model with Food Expenditure variable.", fig.pos = "H"}
-diagnostic.data %>% ggplot(aes(x = predict(pois.fit3, type = 'link'), y = resid(pois.fit3, type = 'deviance'))) +
+```{r, eval=TRUE, diagnostic_plot2, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic2} Residual plot for Poisson model with Food Expenditure variable.", fig.pos = "H"}
+#Assumption check plot
+diagnostic.data %>% ggplot(aes(x = predict(pois.fit3, type = 'link'),
+                               y = resid(pois.fit3, type = 'deviance'))) +
   geom_point() + labs(x = 'Fitted values', y = 'Deviance Residuals')
 
 ```
-The scale of y-axis has increased, going upto a value of 4, but the quantity of points lying outside the preferred range of +-2 has decreased. The model is relatively superior to the one previously considered that used income instead of food expenditure.
+In the figure \ref{fig:diagnostic2}, The scale of y-axis has increased, going upto a value of 4, but the quantity of points lying outside the preferred range of +-2 has decreased. The model is relatively superior to the one previously considered that used income instead of food expenditure.
 
 Next we consider one last model that uses the Negative binomial distribution.
 
-##Model 2: Negative Binomial model
+## Model 2: Negative Binomial model
 
 In this model, the response is assumed to be distributed according to negative binomial distribution. This has an added benefit in the sense that it does not restrict the mean to be equal to the variance and thus could fit better to the data. The link function in this case is also log link and hence the interpretation of regression coefficients is similar to that of poisson model.
 
 ```{r, eval=TRUE, neg_bin, warning=FALSE}
-library(MASS)
-
-negBin.fit <- glm.nb(Total.Number.of.Family.members ~ Log.income + Household.Head.Sex +Household.Head.Age + householdtype_binary + Log.floorarea + House.Age, data = dataset2)
+#Fitting a negative binomial model
+negBin.fit <- glm.nb(Total.Number.of.Family.members ~ Log.income + 
+                       Household.Head.Sex +Household.Head.Age + householdtype_binary +
+                       Log.floorarea + House.Age, data = dataset2)
 
 summary(negBin.fit)
 ```
@@ -314,12 +325,14 @@ At 5% significance, the coefficients are again significant as was previously see
 The diagnostic plot can also be graphed for the negative binomial model.
 
 ```{r, eval=TRUE, echo=FALSE}
+#Assumptions Data
 diagnostic.data['y_negBin'] <- predict(negBin.fit, type = 'response')
 diagnostic.data['negBin_deviance_resid'] <- resid(negBin.fit, type = 'deviance')
 diagnostic.data['y_link_negBin'] <- predict(negBin.fit, type = 'link') 
 ```
 
 ```{r, eval=TRUE, diagnostic_plot3, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic} Residual plot for Negative binomial model.", fig.pos = "H"}
+#Assumptions Check
 diagnostic.data %>% ggplot(aes(y_link_negBin, negBin_deviance_resid)) +
   geom_point() + labs(x = 'Fitted values', y = 'Deviance Residuals')
 
@@ -329,4 +342,6 @@ The plot is very similar to the residual plot seen with the poisson model.
 
 # Conclusion {#sec:conc}
 
-Pois.fit3 superior....comment on significant variables..significance level...
+The Best model seems to be the third poisson model that was fit using the following variables: Log of expenditure on food, Sex of the household head, age of the household head, the type of household, the log of floor area and the age of house. This model has been chosen as the best one based on the AIC of the model and the accuracy of the assumptions. 
+
+Based on the coefficients calculated from the model, a one unit increase in an explanatory variable is associated with a multiplicative effect and results in an effect of $e^{\beta}$. Thus the most influential variable is the total expenditure on food. 
