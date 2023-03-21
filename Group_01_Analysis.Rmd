@@ -15,8 +15,6 @@ knitr::opts_chunk$set(echo = TRUE, eval = TRUE, warning = FALSE, message = FALSE
 
 ```{r libraries}
 #Loading required packages
-library(pROC)
-library(relaimpo)
 library(tidyverse) 
 library(kableExtra)
 library(gridExtra)
@@ -67,7 +65,7 @@ First, data cleaning is performed to convert some categorical variables into fac
 #Data Cleaning
 
 #Removing the variable "Region" since the information relates to only one Region: CAR
-dataset <- dataset %>% select(-Region) 
+dataset <- dataset %>% dplyr::select(-Region) 
 
 dataset$Electricity <- factor(dataset$Electricity)
 dataset$Type.of.Household <- factor(dataset$Type.of.Household)
@@ -135,7 +133,7 @@ dataset['Log.food.exp'] <- log(dataset$Total.Food.Expenditure, base = 2)
 #Removing old variables (variables before conversion)
 
 dataset <- dataset %>% 
-  select(-Total.Household.Income, -House.Floor.Area, -Total.Food.Expenditure)
+  dplyr::select(-Total.Household.Income, -House.Floor.Area, -Total.Food.Expenditure)
 
 ```
 
@@ -228,12 +226,12 @@ We start with the full model, using all the variables, except food expenditure b
 
 ```{r, eval=TRUE, pois_full}
 #Fitting a poison model on complete data
-pois.fit <- glm(Total.Number.of.Family.members ~ ., data = dataset, family = poisson())
+pois.fit <- glm(Total.Number.of.Family.members ~ ., data = dataset[, -c(10)], family = poisson())
 
 summary(pois.fit)
 ```
 
-Using the p-values as a metric to simplify the model, it can be seen that there are variables that need to be taken out, as they are not significant. As was suspected, the variable, number of bedrooms did not turn to be significant.Along with that, whether or not the household has electricity also did not affect the number of members. During the exploratory analysis, it was seen that the category 'Two or more non related persons' had low sample size. The corresponding high standard error could be the effect of that. This also suggests that the 'Type of household' variable could be transformed into a binary variable. A new model is then fit below:
+Using the p-values as a metric to simplify the model, it can be seen that there are variables that need to be taken out, as they are not significant. As was suspected, the variable, number of bedrooms did not turn to be significant.Along with that, whether or not the household has electricity, variable also did not affect the number of members. During the exploratory analysis, it was seen that the category 'Two or more non related persons' had low sample size. The corresponding high standard error could be the effect of that. This also suggests that the 'Type of household' variable could be transformed into a binary variable. A new model is then fit below:
 
 ```{r, eval=TRUE}
 #Combing 2 types of households
@@ -243,13 +241,13 @@ dataset2 <- dataset %>% mutate(
                                     'Not Extended Family' = 
                                       "Two or More Nonrelated Persons/Members"))
 dataset2 <- dataset2 %>% 
-  select(-Type.of.Household)
+  dplyr::select(-Type.of.Household)
 ```
 
 ```{r, eval=TRUE, pois_2}
 #Fitting a poison model to the edited data
-pois.fit2 <- glm(Total.Number.of.Family.members ~ Household.Head.Sex  + House.Age
-                 + Log.income + Log.floorarea + Household.Head.Age + householdtype_binary,
+pois.fit2 <- glm(Total.Number.of.Family.members ~ Household.Head.Sex  +Household.Head.Age + House.Age
+                 + Log.income + Log.floorarea  + householdtype_binary,
                  data = dataset2, family = poisson())
 
 summary(pois.fit2)
@@ -258,13 +256,13 @@ Using p-values as a metric, it is seen that all of the variables seem to be sign
 
 The interpretation of coefficients in this model is different from that of coefficients in OLS. The model itself is multiplicative. So, for example, one unit increase in Log.income means the number of members increase by `r round((exp(pois.fit2$coefficients['Log.income']) - 1)*100, 2)`% 
 
-The deviance for the model, as read from the output, is '1489.3 `r round(pois.fit2$deviance,2)` at 1718 degrees of freedom. This value can be compared with the chi-square quantile for assessing lack of fit. The chi-square quantile is `r round(qchisq(0.95, df = pois.fit2$df.residual), 2)`. The deviance is less, which suggests that fit is better than the saturated model(at 5% significance level).
+The deviance for the model, as read from the output, is `r round(pois.fit2$deviance,2)` at 1718 degrees of freedom. This value can be compared with the chi-square 95% quantile for assessing lack of fit. The chi-square quantile is `r round(qchisq(0.95, df = pois.fit2$df.residual), 2)`. The deviance is less, which suggests that fit is better than the saturated model(at 5% significance level).
 
 After the appropriate model is fitted, the assumptions are needed to be checked. Diagnostic plots can be used which involves plot of fitted values and deviance or pearson residuals.
 
 ```{r ,eval=TRUE, diagnostics}
 #Preparng data for assumption check
-diagnostic.data <- dataset2 %>% select(Total.Number.of.Family.members) %>%
+diagnostic.data <- dataset2 %>% dplyr::select(Total.Number.of.Family.members) %>%
   rename(actual = Total.Number.of.Family.members)
 
 diagnostic.data['y_pois'] <- predict(pois.fit2, type = 'response')
@@ -294,7 +292,7 @@ pois.fit3 <-  glm(Total.Number.of.Family.members ~ Log.food.exp + Household.Head
 summary(pois.fit3)
 
 ```
-There seems to good improvement in the model fitting when AIC and deviance values are considered. The variables again seem to be significant at 5% significance level. The diagnostic plot, similar to the previous model, could be graphed to assess the assumptions.
+There seems to be a good improvement in the model fitting when AIC and deviance values are considered. The variables again seem to be significant at 5% significance level. The diagnostic plot, similar to the previous model, could be graphed to assess the assumptions.
 
 ```{r, eval=TRUE, diagnostic_plot2, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic2} Residual plot for Poisson model with Food Expenditure variable.", fig.pos = "H"}
 #Assumption check plot
