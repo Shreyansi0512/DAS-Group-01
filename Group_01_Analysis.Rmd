@@ -1,0 +1,345 @@
+---
+title: "Analysis of Income and Expenditure Data in the Phillipines"
+author: "Fanting Kai, Jianan Liu, Qijia He, Shreyansi Jain, Subasish Behera"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+          latex_engine: pdflatex
+          number_sections: yes
+fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, warning = FALSE, message = FALSE, comment = NA)
+```
+
+```{r libraries}
+#Loading required packages
+library(tidyverse) 
+library(kableExtra)
+library(gridExtra)
+library(skimr)
+library(knitr)
+library(moderndive)
+library(gapminder)
+library(stats)
+library(GGally)
+library(MASS)
+```
+
+```{r data, echo = FALSE, eval = TRUE}
+#Loading the dataset
+dataset <- read_csv("dataset1.csv")
+```
+
+# Introduction {#sec:intro}
+
+The Philippine Statistics Authority conducts a nationwide survey every 3 years which is aimed at providing the data on family income and expenditure. The data set contains information about the household income, food expenditure, type of household, house floor area and so on.  This analysis aims to identify the household related variables that influence the number of people living in a household in Philippines in the region CAR.
+
+The following report contains an explanatory analysis into the data including data graphics and summaries in \ref{sec:EDA}. The formal analysis has been built using a Generalized Linear Model which will be seen in sections \ref{sec:GLM} and \ref{sec:conc}. 
+
+# Dataset Description {#sec:data}
+
+The data set of interest contains the following variables:
+
+*  Total.Household.Income – Annual household income (in Philippine peso)
+*  Region – The region of the Philippines. The region under consideration is CAR in this analysis
+*  Total.Food.Expenditure – Annual expenditure by the household on food (in Philippine peso)
+*  Household.Head.Sex – Head of the households sex
+*  Household.Head.Age – Head of the households age (in years)
+*  Type.of.Household – Relationship between the group of people living in the house
+*  Total.Number.of.Family.members – Number of people living in the house
+*  House.Floor.Area – Floor area of the house (in $m^2$)
+*  House.Age – Age of the building (in years)
+*  Number.of.bedrooms – Number of bedrooms in the house
+*  Electricity – Does the house have electricity? (1=Yes, 0=No)
+
+From the above list of variables, we notice that six of the variables are numeric (namely Total.Household.Income, Total.Food.Expenditure, Household.Head.Age, House.Floor.Area, House.Age, Number.of.bedrooms) and the rest are categorical (namely Region, Household.Head.Sex, Type.of.Household, Electricity). The response variable of interest is "Total.Number.of.Family.members" (which is numeric). The following section will further analyse the relationship within these variables.
+
+
+# Exploratory Data Analysis {#sec:EDA}
+
+First, data cleaning is performed to convert some categorical variables into factors and unnecessary variables are removed. This will help in easier processing later.
+
+```{r, include= TRUE, eval=TRUE}
+#Data Cleaning
+
+#Removing the variable "Region" since the information relates to only one Region: CAR
+dataset <- dataset %>% dplyr::select(-Region) 
+
+dataset$Electricity <- factor(dataset$Electricity)
+dataset$Type.of.Household <- factor(dataset$Type.of.Household)
+dataset$Household.Head.Sex <- factor(dataset$Household.Head.Sex)
+
+df_num <- select_if(dataset, is.numeric)
+
+#Summary of numeric variables
+my_skim <- skim_with(numeric = sfl(hist = NULL), 
+                  base = sfl(n = length))
+my_skim(df_num) %>%
+  transmute(Variable=skim_variable, n = n, Mean=numeric.mean, SD=numeric.sd,
+            Min=numeric.p0, Median=numeric.p50,  Max=numeric.p100,
+            IQR = numeric.p75-numeric.p50) %>%
+  kable(format.args = list(big.mark = ","),
+  caption = '\\label{tab: Summary Statistics} 
+        Summary statistics for numerical variables.', digits=2) %>%
+  kable_styling(font_size = 10, latex_options = "hold_position")
+
+```
+
+Table \ref{tab: Summary Statistics} shows the summary of numeric information for the `r nrow(dataset)` observations. The data shows clear signs of existence of outliers since for most of the numeric variables, the maximum values are significantly larger than the Median. The mean value and median value also seem significantly different for some variables for eg: Total.Food.Expenditure due to the existence of some extremely large values. 
+`
+
+The boxplots in figure \ref{fig:box} show the outliers suspected in the numeric data summary. Additionally, The density plots show that the data is skewed to the right. Due to the heavily skewed data, it is suggested to use the log scale for these variables. These have been thus converted into a log scale with base 2 to make the data more symmetrical. 
+
+```{r, figures-side, fig.show="hold", out.width = '50%', fig.cap = "\\label{fig:box} Boxplots and density plots of selected variables"}
+
+#Boxplots and density plots of highly skewed numeric variables
+
+ggplot(data = dataset, aes( y = Total.Household.Income)) +
+  geom_boxplot() +
+  ylab("Total Household Income")
+ggplot(data = dataset, aes( x = Total.Household.Income)) +
+  geom_density() +
+  xlab("Total Household Income")
+
+ggplot(data = dataset, aes( y = Total.Food.Expenditure)) +
+  geom_boxplot() +
+  ylab("Total Food Expenditure")
+ggplot(data = dataset, aes( x = Total.Food.Expenditure)) +
+  geom_density() +
+  xlab("Total Food Expenditure")
+
+ggplot(data = dataset, aes( y = House.Floor.Area)) +
+  geom_boxplot() +
+  ylab("Floor Area of House")
+ggplot(data = dataset, aes( x = House.Floor.Area)) +
+  geom_density() +
+  xlab("Floor Area of House")
+
+```
+
+```{r, eval = TRUE}
+
+#Converting the skewed variables into log scale
+
+#base 2 has a nice interpretation
+dataset['Log.income'] <- log(dataset$Total.Household.Income, base = 2) 
+dataset['Log.floorarea'] <- log(dataset$House.Floor.Area, base = 2)
+dataset['Log.food.exp'] <- log(dataset$Total.Food.Expenditure, base = 2) 
+```
+
+```{r}
+#Removing old variables (variables before conversion)
+
+dataset <- dataset %>% 
+  dplyr::select(-Total.Household.Income, -House.Floor.Area, -Total.Food.Expenditure)
+
+```
+
+Next, a pairs plot has been created to look at the scatter plots, density plots and correlation between the transformed variables.
+
+```{r, eval = TRUE, out.width = '100%', fig.align = "center", fig.cap = "\\label{fig:scatters} Correlation plots for numerical variables", fig.pos = "H"}
+#Pairs plot to show the correlation, and density plots and scatter plots of the
+#numeric variables
+ggpairs(dataset[,-c(1, 3, 7)], axisLabels = "none",
+        columnLabels = gsub('.', ' ', colnames(dataset[,-c(1,3,7)]), fixed = T),
+        labeller = label_wrap_gen(10))+
+   theme_bw(base_size = 9)
+
+```
+
+Figure \ref{fig:scatters} shows the scatter plots, density plots and the correlation between the numeric variables. We can see the density plots seem relatively more symmetrical after the transformation into log. From the plot, it is also evident that multi-collinearity exists. Log of total income is highly correlated to log of food expenditure `r round(cor(dataset$Log.income, dataset$Log.food.exp)*100,2)`%. 
+
+Next, we move on to the analysis of the categorical variables. The graphical analysis of categorical variables can be handled with bar charts and summaries. These can be seen below.
+
+```{r, out.width = '60%', fig.align = "center", fig.cap = "\\label{fig:gender of head1} Violin plot of number of family members across gender of household head", fig.pos = "H"}
+
+#Violin plot of total number of family members based on sex of the household head
+
+dataset %>% 
+  ggplot(aes(x = Household.Head.Sex, y = Total.Number.of.Family.members, 
+             fill = Household.Head.Sex))+
+  geom_violin(trim = FALSE)+
+  geom_boxplot(width = 0.1, fill = "white")+
+  theme(legend.position = "none")  +
+  labs(title="Total number of family members based on Sex of Household Head",
+       x="Sex of Household Head", y = "Total number of family members")
+```
+
+```{r,out.width = '70%', fig.align = "center", fig.cap = "\\label{fig:gender of head2} Distribution of number of family members across gender of household head", fig.pos = "H"}
+
+#Barplot of total number of family members based on sex of the household head
+
+dataset %>% ggplot(aes(x = Total.Number.of.Family.members, fill = Household.Head.Sex)) +
+  geom_bar(position = 'fill')+
+  labs(title="Total number of family members based on Sex of Household Head",
+       x="Total number of family members", y = "Percentage of families")
+
+```
+
+From figure \ref{fig:gender of head1}, there seems to be a difference between the number of total family numbers based on the sex of the household head. The figure \ref{fig:gender of head2} shows that the percentage of families with male heads are more than that of female heads. It can also be seen that the percentage of families with male heads increase as the size of family members increase up til 10 members. After this point, the data is too scarce to make a conclusion.
+```{r, out.width = '60%', fig.align = "center", fig.cap = "\\label{fig:type of household1} Violin plot of number of family members across type of household", fig.pos = "H"}
+
+#Viloin plot of total number of family members based on type of household
+
+dataset %>% 
+  ggplot(aes(x = Type.of.Household, y = Total.Number.of.Family.members, 
+             fill = Type.of.Household))+
+  geom_violin(trim = FALSE)+
+  geom_boxplot(width = 0.1, fill = "white")+
+  theme(legend.position = "none")  +
+  labs(title="Total number of family members based on Type of household",
+       x="Type of household", y = "Total number of family members")
+
+```
+
+
+```{r, eval=TRUE, out.width = '75%', fig.align = "center", fig.cap = "\\label{fig:type of household2} Distribution of number of family members across type of houshold", fig.pos = "H" }
+
+#Barplot of total number of family members based on Type of household
+
+dataset %>% ggplot(aes(x = Total.Number.of.Family.members, fill = Type.of.Household)) +
+  geom_bar(position = 'fill')+
+  labs(title="Total number of family members based on Type of Household",
+       x="Total number of family members", y = "Percentage of families")
+
+
+
+```
+
+For 'type of household' variable, a similar trend is seen as before. With higher family members, there is higher proportion of extended family as the type. Given that there is not much data points for the category "Two or More Nonrelated Persons/Members", we can choose to remove it. 
+
+The variables 'number of bedrooms' and 'log of total floor area' tend to vary together i.e the correlation is `r round(cor(dataset$Log.floorarea, dataset$Number.of.bedrooms)*100,2)`%. Households having high floor area generally have a higher number of bedrooms.
+This suggests that once we control for the floor area, number of bedrooms will not be significant. This can tested empirically during the model fit.
+
+Using the trends seen in the data exploration, the analysis can be extended further to examine the relationships using generalized linear models and we bring out 2 different ways to solve the research problem.
+
+# Generalised Linear Model {#sec:GLM}
+## Model 1: Poisson Model
+
+
+The first model that is used for this data is the possion model. This assumes that the response, given the covariates, follows poisson distribution and the mean and the variance are equal. The check for assumptions will be done after the model fitting.
+
+We start with the full model, using all the variables, except food expenditure because of the high correlation with the income variable.
+
+
+```{r, eval=TRUE, pois_full}
+#Fitting a poison model on complete data
+pois.fit <- glm(Total.Number.of.Family.members ~ ., data = dataset[, -c(10)], family = poisson())
+
+summary(pois.fit)
+```
+
+Using the p-values as a metric to simplify the model, it can be seen that there are variables that need to be taken out, as they are not significant. As was suspected, the variable, number of bedrooms did not turn to be significant.Along with that, whether or not the household has electricity, variable also did not affect the number of members. During the exploratory analysis, it was seen that the category 'Two or more non related persons' had low sample size. The corresponding high standard error could be the effect of that. This also suggests that the 'Type of household' variable could be transformed into a binary variable. A new model is then fit below:
+
+```{r, eval=TRUE}
+#Combing 2 types of households
+dataset2 <- dataset %>% mutate(
+  householdtype_binary = fct_recode(Type.of.Household, 
+                                    'Not Extended Family' = 'Single Family', 
+                                    'Not Extended Family' = 
+                                      "Two or More Nonrelated Persons/Members"))
+dataset2 <- dataset2 %>% 
+  dplyr::select(-Type.of.Household)
+```
+
+```{r, eval=TRUE, pois_2}
+#Fitting a poison model to the edited data
+pois.fit2 <- glm(Total.Number.of.Family.members ~ Household.Head.Sex  +Household.Head.Age + House.Age
+                 + Log.income + Log.floorarea  + householdtype_binary,
+                 data = dataset2, family = poisson())
+
+summary(pois.fit2)
+```
+Using p-values as a metric, it is seen that all of the variables seem to be significant. The variable of 'Type of Household' was transformed to a binary variable,with its levels being 'Extended family' and 'not extended family'; the later includes both 'single family' and 'Two or more no related persons'.
+
+The interpretation of coefficients in this model is different from that of coefficients in OLS. The model itself is multiplicative. So, for example, one unit increase in Log.income means the number of members increase by `r round((exp(pois.fit2$coefficients['Log.income']) - 1)*100, 2)`% 
+
+The deviance for the model, as read from the output, is `r round(pois.fit2$deviance,2)` at 1718 degrees of freedom. This value can be compared with the chi-square 95% quantile for assessing lack of fit. The chi-square quantile is `r round(qchisq(0.95, df = pois.fit2$df.residual), 2)`. The deviance is less, which suggests that fit is better than the saturated model(at 5% significance level).
+
+After the appropriate model is fitted, the assumptions are needed to be checked. Diagnostic plots can be used which involves plot of fitted values and deviance or pearson residuals.
+
+```{r ,eval=TRUE, diagnostics}
+#Preparng data for assumption check
+diagnostic.data <- dataset2 %>% dplyr::select(Total.Number.of.Family.members) %>%
+  rename(actual = Total.Number.of.Family.members)
+
+diagnostic.data['y_pois'] <- predict(pois.fit2, type = 'response')
+diagnostic.data['y_link'] <- predict(pois.fit2, type = 'link') #contains log(lambda) values
+diagnostic.data['pois_deviance_resid'] <- resid(pois.fit2, type = 'deviance')
+```
+
+```{r, eval=TRUE, diagnostic_plot1, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic1} Residual plot for Poisson model.", fig.pos = "H"}
+#Assumption Check
+diagnostic.data %>% ggplot(aes(y_link, pois_deviance_resid)) +
+  geom_point() + labs(x = 'Fitted values', y = 'Deviance Residuals')
+
+```
+
+The point of focus is the range of y-axis. Ideally, if the points are between +-2, it suggests a good fitting model. It can be seen in the figure \ref{fig:diagnostic1} that most of the points are within this range.The plot exhibits curvature, suggesting there might be some non-linearity in the relationship between the fitted values and residuals. The model may be improved with inclusion of non-linear terms in the model.
+
+The dispersion parameter is then calculated to check for overdispersion. The estimate of the dispersion parameter for the model is `r round(sum(resid(pois.fit2, type = 'pearson')^2)/pois.fit2$df.residual, 2)`. As the estimated parameter is < 1, overdispersion might not be an issue for this model. This gives assurance to the standard errors calculated for the parameters. A formal test could be done to check for the opposite case i.e., underdispersion, but this situation is unlikely in practice.
+
+The variable 'Total food expenditure' was found to be correlated with 'Total income' and was arbitrarily excluded. The poisson model could be refitted using that variable and keeping out the income variable. The model improvement or deterioration can then judged from metrics like AIC and deviance values. Note that, the variable is used in a log base-2 scale.
+
+```{r, eval=TRUE, pois_3}
+#Fitting another poisson model using Log.food.exp instead of Log.income this time
+pois.fit3 <-  glm(Total.Number.of.Family.members ~ Log.food.exp + Household.Head.Sex 
+                  +Household.Head.Age + householdtype_binary + Log.floorarea + 
+                    House.Age, data = dataset2, family = poisson())
+
+summary(pois.fit3)
+
+```
+There seems to be a good improvement in the model fitting when AIC and deviance values are considered. The variables again seem to be significant at 5% significance level. The diagnostic plot, similar to the previous model, could be graphed to assess the assumptions.
+
+```{r, eval=TRUE, diagnostic_plot2, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic2} Residual plot for Poisson model with Food Expenditure variable.", fig.pos = "H"}
+#Assumption check plot
+diagnostic.data %>% ggplot(aes(x = predict(pois.fit3, type = 'link'),
+                               y = resid(pois.fit3, type = 'deviance'))) +
+  geom_point() + labs(x = 'Fitted values', y = 'Deviance Residuals')
+
+```
+In the figure \ref{fig:diagnostic2}, The scale of y-axis has increased, going upto a value of 4, but the quantity of points lying outside the preferred range of +-2 has decreased. The model is relatively superior to the one previously considered that used income instead of food expenditure.
+
+Next we consider one last model that uses the Negative binomial distribution.
+
+## Model 2: Negative Binomial model
+
+In this model, the response is assumed to be distributed according to negative binomial distribution. This has an added benefit in the sense that it does not restrict the mean to be equal to the variance and thus could fit better to the data. The link function in this case is also log link and hence the interpretation of regression coefficients is similar to that of poisson model.
+
+```{r, eval=TRUE, neg_bin, warning=FALSE}
+#Fitting a negative binomial model
+negBin.fit <- glm.nb(Total.Number.of.Family.members ~ Log.income + 
+                       Household.Head.Sex +Household.Head.Age + householdtype_binary +
+                       Log.floorarea + House.Age, data = dataset2)
+
+summary(negBin.fit)
+```
+
+At 5% significance, the coefficients are again significant as was previously seen with poisson model. Not much difference in AIC and deviance is seen across the two models.
+
+The diagnostic plot can also be graphed for the negative binomial model.
+
+```{r, eval=TRUE, echo=FALSE}
+#Assumptions Data
+diagnostic.data['y_negBin'] <- predict(negBin.fit, type = 'response')
+diagnostic.data['negBin_deviance_resid'] <- resid(negBin.fit, type = 'deviance')
+diagnostic.data['y_link_negBin'] <- predict(negBin.fit, type = 'link') 
+```
+
+```{r, eval=TRUE, diagnostic_plot3, out.width = '80%', fig.align = "center", fig.cap = "\\label{fig:diagnostic} Residual plot for Negative binomial model.", fig.pos = "H"}
+#Assumptions Check
+diagnostic.data %>% ggplot(aes(y_link_negBin, negBin_deviance_resid)) +
+  geom_point() + labs(x = 'Fitted values', y = 'Deviance Residuals')
+
+```
+
+The plot is very similar to the residual plot seen with the poisson model.
+
+# Conclusion {#sec:conc}
+
+The Best model seems to be the third poisson model that was fit using the following variables: Log of expenditure on food, Sex of the household head, age of the household head, the type of household, the log of floor area and the age of house. This model has been chosen as the best one based on the AIC of the model and the accuracy of the assumptions. 
+
+Based on the coefficients calculated from the model, a one unit increase in an explanatory variable is associated with a multiplicative effect and results in an effect of $e^{\beta}$. Thus the most influential variable is the total expenditure on food. 
