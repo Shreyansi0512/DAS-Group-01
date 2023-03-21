@@ -1,6 +1,6 @@
 ---
 title: "Analysis of Income and Expenditure Data in the Phillipines"
-author: "Fanting Kai, Jianan Liu, Qijia He, Shreyansi Jain, Subasish Behera"
+author: "Jianan Liu, Qijia He, Shreyansi Jain, Subasish Behera, Tingkai Fan"
 date: "`r Sys.Date()`"
 output:
   pdf_document:
@@ -181,7 +181,7 @@ dataset %>% ggplot(aes(x = Total.Number.of.Family.members, fill = Household.Head
 From figure \ref{fig:gender of head1}, there seems to be a difference between the number of total family numbers based on the sex of the household head. The figure \ref{fig:gender of head2} shows that the percentage of families with male heads are more than that of female heads. It can also be seen that the percentage of families with male heads increase as the size of family members increase up til 10 members. After this point, the data is too scarce to make a conclusion.
 ```{r, out.width = '60%', fig.align = "center", fig.cap = "\\label{fig:type of household1} Violin plot of number of family members across type of household", fig.pos = "H"}
 
-#Viloin plot of total number of family members based on type of household
+#Violin plot of total number of family members based on type of household
 
 dataset %>% 
   ggplot(aes(x = Type.of.Household, y = Total.Number.of.Family.members, 
